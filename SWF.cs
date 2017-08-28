@@ -1,5 +1,6 @@
 ﻿using ImageMagick;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -94,76 +95,59 @@ namespace swf2lm
 
             public Rect(InputBuffer file)
             {
-                byte currByte = file.readByte();
-                int bitsPerComponent = currByte >> 3;
+                int bitsPerComponent = (int)file.readBits(5);
+                minX = file.readSignedBits(bitsPerComponent) / 20;
+                maxX = file.readSignedBits(bitsPerComponent) / 20;
+                minY = file.readSignedBits(bitsPerComponent) / 20;
+                maxY = file.readSignedBits(bitsPerComponent) / 20;
 
-                var values = new uint[4];
-
-                for (int i = 5, currNum = 0; currNum < 4; currNum++)
-                {
-                    for (int exponent = bitsPerComponent - 1; exponent >= 0; exponent--)
-                    {
-                        var currBit = i % 8;
-                        if (currBit == 0)
-                            currByte = file.readByte();
-
-                        values[currNum] |= (uint)(((currByte >> (7 - currBit)) & 1) << exponent);
-
-                        i++;
-                    }
-
-                    values[currNum] /= 20;
-                }
-
-                minX = (int)values[0];
-                maxX = (int)values[1];
-                minY = (int)values[2];
-                maxY = (int)values[3];
+                file.alignBits();
             }
-        }
-
-        static public List<int> ReadVector(InputBuffer file, int size)
-        {
-            byte currByte = file.readByte();
-            int bitsPerComponent = currByte >> 3;
-
-            var values = new List<int>();
-            for (int i = 5, currNum = 0; currNum < size; currNum++)
-            {
-                int value = 0;
-
-                for (int exponent = bitsPerComponent - 1; exponent >= 0; exponent--)
-                {
-                    var currBit = i % 8;
-                    var thing = (currByte >> (7 - currBit)) & 1;
-                    value |= thing << exponent;
-
-                    if ((++i % 8) == 0)
-                        currByte = file.readByte();
-                }
-
-                values.Add(value);
-            }
-
-            return values;
         }
 
         public class Matrix
         {
-            public int[] data = new int[2 * 3];
+            public float[] data = new float[2 * 3];
+            public bool hasScale;
+            public bool hasRotation;
 
             public Matrix() { }
 
-            public Matrix(InputBuffer file)
+            public Matrix(InputBuffer file, int size = -1)
             {
-                byte currByte = file.readByte();
-                bool hasScale = (currByte & 0x80) == 0x80;
+                hasScale = (file.readBit() == 1);
                 if (hasScale)
                 {
-                    var scale = ReadVector(file, 2);
-                    var x = 43;
+                    var numScaleBits = file.readBits(5);
+
+                    data[0] = file.readSignedBits((int)numScaleBits) * (1.0f / (1 << 16));
+                    data[3] = file.readSignedBits((int)numScaleBits) * (1.0f / (1 << 16));
                 }
+                else
+                {
+                    data[0] = data[3] = 1.0f;
+                }
+
+                hasRotation = (file.readBit() == 1);
+                if (hasRotation)
+                {
+                    var numRotateBits = file.readBits(5);
+
+                    data[1] = file.readSignedBits((int)numRotateBits) * (1.0f / (1 << 16));
+                    data[2] = file.readSignedBits((int)numRotateBits) * (1.0f / (1 << 16));
+                }
+                else
+                {
+                    data[1] = data[2] = 0.0f;
+                }
+
+                var numTranslateBits = file.readBits(5);
+                data[4] = file.readSignedBits((int)numTranslateBits) / 20;
+                data[5] = file.readSignedBits((int)numTranslateBits) / 20;
+
+                file.alignBits();
             }
+
         }
 
         public abstract class Tag
@@ -181,6 +165,63 @@ namespace swf2lm
             ClippedBitmap = 0x41,
             NonSmoothedRepeatingBitmap = 0x42,
             NonSmoothedClippedBitmap = 0x43
+        }
+
+        public class PlaceObject2 : Tag
+        {
+            public const byte PlaceFlagHasClipActions = 0x80;
+            public const byte PlaceFlagHasClipDepth = 0x40;
+            public const byte PlaceFlagHasName = 0x20;
+            public const byte PlaceFlagHasRatio = 0x10;
+            public const byte PlaceFlagHasColorTransform = 0x08;
+            public const byte PlaceFlagHasMatrix = 0x04;
+            public const byte PlaceFlagHasCharacter = 0x02;
+            public const byte PlaceFlagMove = 0x01;
+
+            public short depth;
+            public short characterId = -1;
+            public string name = null;
+            public Matrix matrix = null;
+            public short ratio;
+            public short clipDepth = -1;
+
+            public PlaceObject2() { }
+            public PlaceObject2 (InputBuffer file, TagType type, int size)
+            {
+                Read(file, type, size);
+            }
+
+            public override void Read(InputBuffer file, TagType type, int size)
+            {
+                byte littleBits = file.readByte();
+                depth = file.readShortLE();
+
+                if ((littleBits & PlaceFlagHasCharacter) == PlaceFlagHasCharacter)
+                    characterId = file.readShortLE();
+
+                if ((littleBits & PlaceFlagHasMatrix) == PlaceFlagHasMatrix)
+                    matrix = new Matrix(file, size*8);
+
+                if ((littleBits & PlaceFlagHasColorTransform) == PlaceFlagHasColorTransform)
+                {
+                    var zzz = 3;
+                    // var colorXform = new CXFORMWITHALPHA(file);
+                }
+
+                if ((littleBits & PlaceFlagHasRatio) == PlaceFlagHasRatio)
+                    ratio = file.readShortLE();
+
+                if ((littleBits & PlaceFlagHasName) == PlaceFlagHasName)
+                    name = file.readString();
+
+                if ((littleBits & PlaceFlagHasClipDepth) == PlaceFlagHasClipDepth)
+                    clipDepth = file.readShortLE();
+
+                if ((littleBits & PlaceFlagHasClipActions) == PlaceFlagHasClipActions)
+                {
+                    var whatDoYouThinkTapWaterIs = "it's a gay-bomb, baby!";
+                }
+            }
         }
 
         public class DefineShape : Tag
@@ -250,6 +291,58 @@ namespace swf2lm
             }
         }
 
+        public class DefineBitsJPEG3 : Tag
+        {
+            public short CharacterId;
+            public Image Image;
+
+            public byte[] data;
+            public byte[] alphaData;
+
+            public DefineBitsJPEG3() { }
+
+            public DefineBitsJPEG3(InputBuffer file, TagType type, int size)
+            {
+                Read(file, type, size);
+            }
+
+            public override void Read(InputBuffer file, TagType type, int size)
+            {
+                CharacterId = file.readShortLE();
+                uint dataSize = file.readUIntLE();
+                data = file.read((int)dataSize);
+                var stream = new MemoryStream(data);
+                var bmp = new Bitmap(stream);
+
+                file.ptr += 2;
+                var compressedAlphaStream = new MemoryStream(file.read((int)(size - (dataSize + 2 + 2))));
+                var decompressedAlpha = new MemoryStream();
+
+                var ds = new DeflateStream(compressedAlphaStream, CompressionMode.Decompress);
+                ds.CopyTo(decompressedAlpha);
+
+                alphaData = decompressedAlpha.ToArray();
+                //alphaData = file.read(bmp.Width * bmp.Height);
+
+                //var bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+
+                for (int x = 0; x < bmp.Width; x++)
+                {
+                    for (int y = 0; y < bmp.Height; y++)
+                    {
+                        var px = bmp.GetPixel(x, y);
+                        var newPx = Color.FromArgb(alphaData[y * bmp.Width + x], px.R, px.G, px.B);
+                        bmp.SetPixel(x, y, newPx);
+                    }
+                }
+                //bmp.UnlockBits(bmpData);
+
+                var fn = $@"C:\s4explore\workspace\content\patch\data\ui\lumen\main\img-{0:D5}.png";
+                bmp.Save(fn);
+                //alphaData = (file.ptr - dataSize - 2)
+            }
+        }
+
         public class DefineBitsLossless : Tag
         {
             public enum BitmapFormat : byte
@@ -303,10 +396,10 @@ namespace swf2lm
                         byte g = data[1 + 2];
                         byte b = data[i + 3];
 
-                        data[i + 0] = b;
-                        data[i + 1] = b;
-                        data[i + 2] = b;
-                        data[i + 3] = a; //
+                        data[i + 0] = b; // blue
+                        data[i + 1] = b; // green
+                        data[i + 2] = b; // red
+                        data[i + 3] = a;// a;
                     }
 
                     var image = new Bitmap(width, height, PixelFormat.Format32bppArgb);
@@ -325,6 +418,7 @@ namespace swf2lm
         {
             public TagType type;
             public byte[] data;
+            public int offset;
 
             public override void Read(InputBuffer file, TagType type, int size)
             {
@@ -353,13 +447,19 @@ namespace swf2lm
             uint length = file.readUIntLE();
 
             rect = new Rect(file);
-            lm.positions.Add(new Lumen.Vector2(rect.maxX/2, rect.maxY/2));
 
             Framerate = file.readShort(); // fixed point 8.8
             short frameCount = file.readShortLE();
             // end of header
 
             var textures = new List<Image>();
+
+            var sprite = new Lumen.Sprite();
+            sprite.characterId = 3;
+            sprite.unk1 = 0;
+            sprite.unk2 = 0;
+            sprite.unk3 = 0x10000;
+            lm.sprites.Add(sprite);
 
             while (true)
             {
@@ -370,6 +470,12 @@ namespace swf2lm
                 if (tagSize == 0x3F)
                     tagSize = (int)file.readUIntLE();
 
+                //if (type == TagType.DefineBitsJPEG3)
+                //{
+                //    var tag = new DefineBitsJPEG3(file, type, tagSize);
+
+                //    Tags.Add(tag);
+                //}
                 if (type == TagType.DefineBitsLossless || type == TagType.DefineBitsLossless2)
                 {
                     var tag = new DefineBitsLossless(file, type, tagSize);
@@ -406,10 +512,69 @@ namespace swf2lm
                 //{
                 //    Tags.Add(new DefineShape(file, type, tagSize));
                 //}
+                else if (type == TagType.PlaceObject2)
+                {
+                    var tag = new PlaceObject2(file, type, tagSize);
+                    Tags.Add(tag);
+
+                    var placement = new Lumen.Sprite.Placement();
+                    if (tag.characterId == -1)
+                    {
+                        placement.characterId = 0;
+                        placement.placementId = -1;
+                        placement.unk2 = 2;
+                    }
+                    else
+                    {
+                        //placement.characterId = tag.characterId;
+                        placement.characterId = 1;
+                        placement.placementId = 0;
+                        placement.unk2 = 1;
+                    }
+
+                    //placement.depth = tag.depth;
+                    placement.depth = 0;
+                    placement.unk1 = 0;
+                    placement.nameId = 0;
+                    placement.unk3 = 0;
+                    placement.unk4 = 0;
+                    placement.transformFlags = 0;
+                    placement.transformId = 0;
+
+                    // use position entry if no scale or rotation
+                    if (!tag.matrix.hasRotation && !tag.matrix.hasScale)
+                    {
+                        placement.positionFlags = 0x8000;
+                        placement.positionId = (short)lm.positions.Count;
+                        lm.positions.Add(new Lumen.Vector2(tag.matrix.data[4], tag.matrix.data[5]));
+                    }
+                    else
+                    {
+                        placement.positionFlags = 0;
+                        placement.positionId = (short)lm.transforms.Count;
+                        var xform = new Lumen.Transform();
+                        xform.M11 = tag.matrix.data[0];
+                        xform.M12 = tag.matrix.data[1];
+                        xform.M21 = tag.matrix.data[2];
+                        xform.M22 = tag.matrix.data[3];
+                        xform.M31 = tag.matrix.data[4];
+                        xform.M32 = tag.matrix.data[5];
+                        lm.transforms.Add(xform);
+
+                    }
+                    placement.colorId1 = 0;
+                    placement.colorId2 = 1;
+
+                    var frame = new Lumen.Sprite.Frame();
+                    frame.id = lm.sprites[0].frames.Count;
+                    frame.placements.Add(placement);
+                    lm.sprites[0].frames.Add(frame);
+                }
                 else
                 {
                     var tag = new UnhandledTag();
                     tag.type = type;
+                    tag.offset = (int)file.ptr;
                     tag.data = file.read(tagSize);
                     Tags.Add(tag);
                 }
@@ -435,7 +600,7 @@ namespace swf2lm
             lm.properties.maxCharacterId = 3;
             lm.properties.unk4 = -1;
             lm.properties.maxCharacterId2 = 3;
-            lm.properties.maxDepth = 0;
+            lm.properties.maxDepth = 1; // FIXME
             lm.properties.unk7 = 0;
             lm.properties.framerate = Framerate;
             lm.properties.width = rect.maxX;
@@ -469,64 +634,14 @@ namespace swf2lm
             lm.symbols.Add("");
             lm.symbols.Add("lmf");
             lm.symbols.Add("15");
-            lm.symbols.Add("init");
-            lm.symbols.Add("in");
-            lm.symbols.Add("in_end");
-            lm.symbols.Add("out");
-            lm.symbols.Add("out_end");
             lm.symbols.Add("00000");
 
             var atlas = new Lumen.TextureAtlas();
             atlas.id = 0;
-            atlas.unk = 0x5B; // pool id
+            atlas.unk = 0x08;
             atlas.width = 512;
             atlas.height = 512;
             lm.textureAtlases.Add(atlas);
-
-            var sprite = new Lumen.Sprite();
-            sprite.characterId = 3;
-            sprite.unk1 = 0;
-            sprite.unk2 = 0;
-            sprite.unk3 = 0x10000;
-
-            var placement = new Lumen.Sprite.Placement();
-            placement.characterId = 1;
-            placement.placementId = 0;
-            placement.unk1 = 0;
-            placement.nameId = 0;
-            placement.unk2 = 1;
-            placement.unk3 = 0;
-            placement.depth = 0;
-            placement.unk4 = 0;
-            placement.transformFlags = 0;
-            placement.transformId = 0;
-            placement.positionFlags = 0x8000;
-            placement.positionId = 0;
-            placement.colorId1 = 0;
-            placement.colorId2 = 1;
-
-
-            for (int i = 0; i < 5; i++)
-            {
-                var label = new Lumen.Sprite.Label();
-                label.nameId = 3 + i;
-                label.startFrame = i;
-                label.unk1 = 0;
-                sprite.labels.Add(label);
-
-                var frame = new Lumen.Sprite.Frame();
-                frame.id = i;
-                frame.placements.Add(placement);
-                sprite.keyframes.Add(frame);
-                if (i > 0)
-                {
-                    frame = new Lumen.Sprite.Frame();
-                    frame.id = i;
-                }
-                sprite.frames.Add(frame);
-            }
-
-            lm.sprites.Add(sprite);
 
             using (var fs = new FileStream(@"C:\s4explore\workspace\content\patch\data\ui\lumen\main\main.lm", FileMode.Create))
             {

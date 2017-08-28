@@ -8,6 +8,15 @@ namespace swf2lm
     {
         private byte[] data;
         public uint ptr;
+        public uint bitPtr;
+
+        public int Length
+        {
+            get
+            {
+                return data.Length;
+            }
+        }
 
         public InputBuffer (Stream inStream)
         {
@@ -24,6 +33,48 @@ namespace swf2lm
         public InputBuffer(string filename)
         {
             data = File.ReadAllBytes(filename);
+        }
+
+        public int readBit()
+        {
+            int v = (data[ptr] >> (int)(7 - bitPtr++)) & 1;
+
+            if (bitPtr == 8)
+            {
+                bitPtr = 0;
+                ptr++;
+            }
+
+            return v;
+        }
+
+        public uint readBits (int nbits)
+        {
+            uint val = 0;
+            for (uint t = 0; t < nbits; t++)
+            {
+                val <<= 1;
+                val |= (uint)readBit();
+            }
+            return val;
+        }
+
+        public int readSignedBits(int nbits)
+        {
+            var res = readBits(nbits);
+            if ((res & (1 << (nbits - 1))) == res)
+                res |= (0xffffffff << nbits);
+
+            return (int)res;
+        }
+
+        public void alignBits()
+        {
+            if (bitPtr > 0)
+            {
+                bitPtr = 0;
+                ptr++;
+            }
         }
 
         public byte[] read(int size)
