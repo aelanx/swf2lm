@@ -61,8 +61,9 @@ namespace swf2lm
 
         public int readSignedBits(int nbits)
         {
-            var res = readBits(nbits);
-            if ((res & (1 << (nbits - 1))) == res)
+            uint res = readBits(nbits);
+
+            if ((res & (1 << (nbits - 1))) != 0)
                 res |= (0xffffffff << nbits);
 
             return (int)res;
