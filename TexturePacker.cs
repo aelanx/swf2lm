@@ -54,7 +54,7 @@ namespace swf2lm
             return v;
         }
 
-        public void Process(List<Image> textureImages)
+        public void Process(List<Image> textureImages, string outputPath)
         {
             Padding = 1;
             AtlasSize = 2048;
@@ -133,7 +133,7 @@ namespace swf2lm
                 nut.width = img.Width;
                 nut.height = img.Height;
 
-                var filename = $@"C:\s4explore\workspace\content\patch\data\ui\lumen\main\img-{atlasId:D5}.nut";
+                var filename = Path.Combine(outputPath, $"img-{atlasId:D5}.nut");
                 using (var fs = new FileStream(filename, FileMode.Create))
                 {
                     var nutData = nut.Rebuild();

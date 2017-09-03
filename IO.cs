@@ -59,17 +59,27 @@ namespace swf2lm
             return val;
         }
 
-        public int readSignedBits(int nbits)
+        public int readSignedBits(int numBits)
         {
-            uint res = readBits(nbits);
+            uint res = readBits(numBits);
 
-            if ((res & (1 << (nbits - 1))) != 0)
-                res |= (0xffffffff << nbits);
+            if ((res & (1 << (numBits - 1))) != 0)
+                res |= (0xffffffff << numBits);
 
             return (int)res;
         }
 
-        public void alignBits()
+        public float readFixed8(int numBits)
+        {
+            return readSignedBits(numBits) / 256.0f;
+        }
+
+        public float readFixed16(int numBits)
+        {
+            return readSignedBits(numBits) / 65536.0f;
+        }
+
+        public void AlignBits()
         {
             if (bitPtr > 0)
             {

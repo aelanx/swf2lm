@@ -193,10 +193,10 @@ namespace swf2lm
 
         public class Color
         {
-            public float r = 0;
-            public float g = 0;
-            public float b = 0;
-            public float a = 0;
+            public float R = 0;
+            public float G = 0;
+            public float B = 0;
+            public float A = 0;
 
             public Color()
             {
@@ -204,31 +204,42 @@ namespace swf2lm
 
             public Color(float r, float g, float b, float a)
             {
-                this.r = r;
-                this.g = g;
-                this.b = b;
-                this.a = a;
+                this.R = r;
+                this.G = g;
+                this.B = b;
+                this.A = a;
             }
 
             public Color(short r, short g, short b, short a)
             {
-                this.r = r / 256.0f;
-                this.g = g / 256.0f;
-                this.b = b / 256.0f;
-                this.a = a / 256.0f;
+                this.R = r / 256.0f;
+                this.G = g / 256.0f;
+                this.B = b / 256.0f;
+                this.A = a / 256.0f;
             }
 
             public Color(uint rgba)
             {
-                r = ((rgba >> 24) & 0xFF) / 255.0f;
-                g = ((rgba >> 16) & 0xFF) / 255.0f;
-                b = ((rgba >> 8) & 0xFF) / 255.0f;
-                a = ((rgba) & 0xFF) / 255.0f;
+                R = ((rgba >> 24) & 0xFF) / 255.0f;
+                G = ((rgba >> 16) & 0xFF) / 255.0f;
+                B = ((rgba >> 8) & 0xFF) / 255.0f;
+                A = ((rgba) & 0xFF) / 255.0f;
             }
 
             public override string ToString()
             {
-                return $"[{r}, {g}, {b}, {a}]";
+                return $"[{R}, {G}, {B}, {A}]";
+            }
+
+            public override bool Equals(object obj)
+            {
+                var other = (Color)obj;
+                return (R == other.R && G == other.G && B == other.B && A == other.A);
+            }
+
+            public override int GetHashCode()
+            {
+                return (int)R ^ (int)G ^ (int)B ^ (int)A;
             }
         }
 
@@ -256,7 +267,7 @@ namespace swf2lm
         public struct TextureAtlas
         {
             public int id;
-            public int unk;
+            public int nameId;
 
             public float width;
             public float height;
@@ -549,12 +560,12 @@ namespace swf2lm
                 public short depth;
                 public short unk4;
 
-                public short transformFlags;
-                public short transformId;
+                public short unk5;
+                public short unk6;
                 public ushort positionFlags;
                 public short positionId;
-                public int colorId1;
-                public int colorId2;
+                public int colorMultId;
+                public int colorAddId;
 
                 public UnhandledTag colorMatrix = null;
                 public UnhandledTag unkF014 = null;
@@ -574,16 +585,16 @@ namespace swf2lm
                     placementId = f.readInt();
                     unk1 = f.readInt();
                     nameId = f.readInt();
-                    unk2 = (short)f.readShort();
-                    unk3 = (short)f.readShort();
-                    depth = (short)f.readShort();
-                    unk4 = (short)f.readShort();
-                    transformFlags = (short)f.readShort();
-                    transformId = (short)f.readShort();
+                    unk2 = f.readShort();
+                    unk3 = f.readShort();
+                    depth = f.readShort();
+                    unk4 = f.readShort();
+                    unk5 = f.readShort();
+                    unk6 = f.readShort();
                     positionFlags = (ushort)f.readShort();
-                    positionId = (short)f.readShort();
-                    colorId1 = f.readInt();
-                    colorId2 = f.readInt();
+                    positionId = f.readShort();
+                    colorMultId = f.readInt();
+                    colorAddId = f.readInt();
 
                     bool hasColorMatrix = (f.readInt() == 1);
                     bool hasUnkF014 = (f.readInt() == 1);
@@ -612,12 +623,12 @@ namespace swf2lm
                     o.writeShort(unk3);
                     o.writeShort(depth);
                     o.writeShort(unk4);
-                    o.writeShort(transformFlags);
-                    o.writeShort(transformId);
+                    o.writeShort(unk5);
+                    o.writeShort(unk6);
                     o.writeShort((short)positionFlags);
                     o.writeShort(positionId);
-                    o.writeInt(colorId1);
-                    o.writeInt(colorId2);
+                    o.writeInt(colorMultId);
+                    o.writeInt(colorAddId);
 
                     o.writeInt((colorMatrix != null) ? 1 : 0);
                     o.writeInt((unkF014 != null) ? 1 : 0);
@@ -633,7 +644,7 @@ namespace swf2lm
             public class Deletion
             {
                 public int unk1;
-                public short depth; // or was it placement id?
+                public short depth;
                 public short unk2;
 
                 public Deletion(InputBuffer f)
@@ -749,7 +760,7 @@ namespace swf2lm
                 }
             }
 
-            public int characterId;
+            public int CharacterId;
             public int unk1;
             public int unk2;
             public int unk3;
@@ -769,7 +780,7 @@ namespace swf2lm
 
             public void Read(InputBuffer f)
             {
-                characterId = f.readInt();
+                CharacterId = f.readInt();
                 unk1 = f.readInt();
                 unk2 = f.readInt();
 
@@ -809,7 +820,7 @@ namespace swf2lm
             {
                 o.writeInt((int)TagType.DefineSprite);
                 o.writeInt(7);
-                o.writeInt(characterId);
+                o.writeInt(CharacterId);
                 o.writeInt(unk1);
                 o.writeInt(unk2);
                 o.writeInt(labels.Count);
@@ -878,7 +889,7 @@ namespace swf2lm
             }
         }
 
-        public class Transform
+        public struct Transform
         {
             public float M11;
             public float M12;
@@ -886,10 +897,23 @@ namespace swf2lm
             public float M22;
             public float M31;
             public float M32;
+
+            public Transform(float[] data)
+            {
+                M11 = data[0];
+                M12 = data[1];
+                M21 = data[2];
+                M22 = data[3];
+                M31 = data[4];
+                M32 = data[5];
+            }
         }
 
         public class Vector2
         {
+            public float X;
+            public float Y;
+
             public Vector2()
             {
             }
@@ -900,45 +924,113 @@ namespace swf2lm
                 Y = y;
             }
 
-            public float X;
-            public float Y;
+            public override bool Equals(object obj)
+            {
+                var other = (Vector2)obj;
+                return (X == other.X && Y == other.Y);
+            }
+
+            public override int GetHashCode()
+            {
+                return ((int)X ^ (int)Y);
+            }
         }
 
-        public Header header;
-        public List<string> symbols { get; set; }
-        public List<Color> colors { get; set; }
+        public Header header = new Header();
+        public List<string> symbols = new List<string>();
+        public List<Color> colors = new List<Color>();
         public List<Transform> transforms = new List<Transform>();
         public List<Vector2> positions = new List<Vector2>();
-        public List<ShapeBounds> bounds { get; set; }
-        public List<TextureAtlas> textureAtlases { get; set; }
-        public List<Shape> shapes { get; set; }
-        public List<DynamicText> texts { get; set; }
-        public List<Sprite> sprites { get; set; }
+        public List<ShapeBounds> bounds = new List<ShapeBounds>();
+        public List<TextureAtlas> textureAtlases = new List<TextureAtlas>();
+        public List<Shape> shapes = new List<Shape>();
+        public List<DynamicText> texts = new List<DynamicText>();
+        public List<Sprite> sprites = new List<Sprite>();
 
-        public Properties properties;
+        public Properties properties = new Properties();
         public UnhandledTag actionscript;
         public UnhandledTag unkF008;
         public UnhandledTag unkF009;
         public UnhandledTag unkF00A;
         public UnhandledTag unk000A;
         public UnhandledTag unkF00B;
-        public Properties2 properties2;
+        public Properties2 properties2 = new Properties2();
 
         public Lumen()
         {
-            header = new Header();
-            symbols = new List<string>();
-            colors = new List<Color>();
-            bounds = new List<ShapeBounds>();
-            textureAtlases = new List<TextureAtlas>();
-            shapes = new List<Shape>();
-            texts = new List<DynamicText>();
-            sprites = new List<Sprite>();
         }
 
         public Lumen(string filename) : this()
         {
             Read(filename);
+        }
+
+        public int AddPosition(Vector2 pos)
+        {
+            int index = -1;
+
+            if (positions.Contains(pos))
+            {
+                index = positions.IndexOf(pos);
+            }
+            else
+            {
+                index = positions.Count;
+                positions.Add(pos);
+            }
+
+            return index;
+        }
+
+        public int AddString(string str)
+        {
+            int index = -1;
+
+            if (symbols.Contains(str))
+            {
+                index = symbols.IndexOf(str);
+            }
+            else
+            {
+                index = symbols.Count;
+                symbols.Add(str);
+            }
+
+            return index;
+        }
+
+        public int AddColor(Color color)
+        {
+            int index = -1;
+
+            if (colors.Contains(color))
+            {
+                index = colors.IndexOf(color);
+            }
+            else
+            {
+                index = colors.Count;
+                colors.Add(color);
+            }
+
+            return index;
+        }
+
+        public int AddTransform(Lumen.Transform xform)
+        {
+            int index = -1;
+
+            if (transforms.Contains(xform))
+            {
+                index = transforms.IndexOf(xform);
+            }
+            else
+            {
+                index = transforms.Count;
+                transforms.Add(xform);
+            }
+
+            return index;
         }
 
         public void Read(string filename)
@@ -995,7 +1087,7 @@ namespace swf2lm
                         {
                             var offs = f.ptr;
                             var color = new Color(f.readShort(), f.readShort(), f.readShort(), f.readShort());
-                            colors.Add(color);
+                            AddColor(color);
                         }
 
                         break;
@@ -1080,7 +1172,7 @@ namespace swf2lm
                         {
                             TextureAtlas atlas = new TextureAtlas();
                             atlas.id = f.readInt();
-                            atlas.unk = f.readInt();
+                            atlas.nameId = f.readInt();
                             atlas.width = f.readFloat();
                             atlas.height = f.readFloat();
 
@@ -1138,10 +1230,10 @@ namespace swf2lm
 
             foreach (var color in colors)
             {
-                o.writeShort((short)(color.r * 255));
-                o.writeShort((short)(color.g * 255));
-                o.writeShort((short)(color.b * 255));
-                o.writeShort((short)(color.a * 255));
+                o.writeShort((short)(color.R * 256));
+                o.writeShort((short)(color.G * 256));
+                o.writeShort((short)(color.B * 256));
+                o.writeShort((short)(color.A * 256));
             }
         }
 
@@ -1199,7 +1291,7 @@ namespace swf2lm
             foreach (var atlas in textureAtlases)
             {
                 o.writeInt(atlas.id);
-                o.writeInt(atlas.unk);
+                o.writeInt(atlas.nameId);
                 o.writeFloat(atlas.width);
                 o.writeFloat(atlas.height);
             }
@@ -1246,7 +1338,7 @@ namespace swf2lm
             writeBounds(o);
             if (actionscript == null)
             {
-                o.writeInt((int)Lumen.TagType.ActionScript);
+                o.writeInt((int)TagType.ActionScript);
                 o.writeInt(1);
                 o.writeInt(0);
             }
