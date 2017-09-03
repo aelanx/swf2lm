@@ -545,16 +545,12 @@ namespace swf2lm
             uint length = file.readUIntLE();
 
 
-            // zlib
-            if (magic0 == 'C')
-            {
-
-            }
-
             // lzma. no point in supporting since it's only used in swf 13+
             // which will cause other problems I don't care to deal with.
             //if (magic0 == 'Z')
             //    throw new Exception("LZMA");
+
+            if (magic0 == 'C')
             {
                 file.ptr += 2;
                 var compressedStream = new MemoryStream(file.read(file.Length - 10));
