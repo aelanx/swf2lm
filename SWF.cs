@@ -535,10 +535,36 @@ namespace swf2lm
             var file = new InputBuffer(filename);
 
             byte magic0 = file.readByte();
+
+
             short magicPad = file.readShort();
             byte version = file.readByte();
+            if (version > 8)
+                throw new Exception($"Unsupported SWF version {version}. Maximum supported verison = 8.");
 
             uint length = file.readUIntLE();
+
+
+            // zlib
+            if (magic0 == 'C')
+            {
+
+            }
+
+            // lzma. no point in supporting since it's only used in swf 13+
+            // which will cause other problems I don't care to deal with.
+            //if (magic0 == 'Z')
+            //    throw new Exception("LZMA");
+            {
+                file.ptr += 2;
+                var compressedStream = new MemoryStream(file.read(file.Length - 10));
+                var decompressedStream = new MemoryStream();
+
+                var ds = new DeflateStream(compressedStream, CompressionMode.Decompress);
+                ds.CopyTo(decompressedStream);
+
+                file = new InputBuffer(decompressedStream.ToArray());
+            }
 
             rect = new Rect(file);
             Framerate = file.readShort(); // fixed point 8.8
